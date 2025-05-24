@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import { assets, dummyAddress } from "../assets/assets";
 import { useAppContext } from "../context/AppContext";
+import toast from "react-hot-toast";
 
 const Card = () => {
 
     const {products,currency, cartItems,removeFromCart,getCartCount,
-        updateCartItem,navigate,getCartAmount}= useAppContext();
+        updateCartItem,navigate,getCartAmount,axios,user,setCartItems}= useAppContext();
 
     const [cartArray,setCartArrary]=useState([]);
-    const [addreses,setAddreses] =useState(dummyAddress)
+    const [addresses,setAddresses] =useState([])
     const [showAddress, setShowAddress] = useState(false)
-    const [selectedAddress,setSelectedAddress]=useState(dummyAddress[0]);
+    const [selectedAddress,setSelectedAddress]=useState(null);
     const [paymentOption,setPaymentOption]=useState("COD");
 
     const getCart=()=>{
@@ -23,8 +24,51 @@ const Card = () => {
         setCartArrary(tempArrary)
     }
 
-    const placeOrder= async()=>{
+    const getUserAddress= async()=>{
+        try {
+            const {data}= await axios.get('/api/address/get');
+            if (data.success) {
+                setAddresses(data.addresses)
+                if (data.addresses.length > 0) {
+                    setSelectedAddress(data.addresses[0])
+                }
+            }else{
+                toast.error(data.message)
+            }
+        } catch (error) {
+             toast.error(error.message)
+        }
+    }
 
+    const placeOrder= async()=>{
+        try {
+            if (!selectedAddress) {
+                return toast.error("Please select an address")
+            }
+
+            // place order with COD 
+            if (paymentOption=="COD") {
+                
+                const {data}= await axios.post('/api/order/cod', {
+                    userId: user._id,
+                    items: cartArray.map(item=> ({
+                        product: item._id, 
+                        quantity: item.quantity || 1
+                    })),
+                    address: selectedAddress._id
+                })
+
+                if (data.success) {
+                    toast.success(data.message)
+                    setCartItems({})
+                    navigate('/my-orders')
+                }else{
+                    toast.error(data.message)
+                }
+            }
+        } catch (error) {
+             toast.error(error.message)
+        }
     }
 
     useEffect(()=>{
@@ -34,6 +78,11 @@ const Card = () => {
         
     },[products, cartItems])
 
+    useEffect(()=>{
+        if (user) {
+            getUserAddress();
+        }
+    },[user])
    
 
     return products.length > 0 && cartItems ? (
@@ -107,8 +156,10 @@ const Card = () => {
                         </button>
                         {showAddress && (
                             <div className="absolute top-12 py-1 bg-white border border-gray-300 text-sm w-full">
-                               {addreses.map((address,index)=>(
-                                <p onClick={() => {setSelectedAddress(address); setShowAddress(false)}} className="text-gray-500 p-2 hover:bg-gray-100">
+                               {addresses?.map((address,index)=>(
+                                <p 
+                                key={address._id || index}
+                                onClick={() => {setSelectedAddress(address); setShowAddress(false)}} className="text-gray-500 p-2 hover:bg-gray-100">
                                 {address.street},
                                 {address.city},
                                 {address.state},
@@ -148,7 +199,7 @@ const Card = () => {
                     </p>
                 </div>
 
-                <button onClick={placeOrder()} className="w-full py-3 mt-6 cursor-pointer bg-primary text-white font-medium hover:bg-primary-dull transition">
+                <button onClick={placeOrder} className="w-full py-3 mt-6 cursor-pointer bg-primary text-white font-medium hover:bg-primary-dull transition">
                    {paymentOption === "COD" ? "Place Order" : "Proceed to Checkout"}
                 </button>
             </div>
